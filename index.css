@@ -263,7 +263,7 @@ nav.scrolled {
 }
 .quote-band-text {
   font-family: var(--px);
-  font-size: clamp(16px, 2vw, 22px);
+  font-size: clamp(14px, 2vw, 22px);
   color: #f0f0f0;
   letter-spacing: 0.04em;
   line-height: 1.35;
