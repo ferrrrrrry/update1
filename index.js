@@ -1,8 +1,6 @@
 (function () {
   const canvas = document.getElementById("hero-canvas"),
     ctx = canvas.getContext("2d");
-  const logo = new Image();
-  logo.src = "https://cdn.shopify.com/assets/images/logos/shopify-bag.png";
   let W, H;
 
   function resize() {
@@ -45,21 +43,18 @@
       ox = (t * 0.28) % sz,
       oy = (t * 0.14) % sz;
     for (let x = ox; x < W; x += sz) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
     }
     for (let y = oy; y < H; y += sz) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
     }
 
-    if (logo.complete) {
-      const size = 70;
-      const x = W / 2 - size / 2;
-      const y = (W > 640 ? H / 12 : H / 20) - size / 2 + Math.sin(t * 0.03) * 10;
-      ctx.save();
-      ctx.globalAlpha = 0.85;
-      ctx.drawImage(logo, x, y, size, size);
-      ctx.restore();
-    }
     requestAnimationFrame(draw);
   }
 
@@ -105,6 +100,22 @@ document.querySelectorAll("a,button").forEach((el) => {
 window.addEventListener("scroll", () =>
   document.getElementById("nav").classList.toggle("scrolled", scrollY > 40),
 );
+// ── CENTRALIZED EVENT DELEGATION ────────────────────────────────────────────
+document.addEventListener("click", function (e) {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const action = el.dataset.action;
+  const modal = el.dataset.modal;
+
+  if (action === "toggle-menu") toggleMenu();
+  else if (action === "open-modal") openModal(modal);
+  else if (action === "close-modal") closeModal(modal);
+  else if (action === "close-modal-outside" && e.target === el)
+    closeModal(modal);
+  else if (action === "toggle-faq") toggleFaq(el);
+  else if (action === "submit-form") submitForm();
+});
+
 function toggleMenu() {
   document.getElementById("ham").classList.toggle("open");
   document.getElementById("mob-menu").classList.toggle("open");
@@ -289,6 +300,169 @@ document.querySelectorAll(".section-tag").forEach((el) => {
   window.addEventListener("resize", setup);
 })();
 
+// ── LIGHTBOX ─────────────────────────────────────────────────────────────────
+(function initLightbox() {
+  const lb     = document.getElementById("lightbox");
+  const lbImg  = document.getElementById("lightbox-img");
+  const lbVid  = document.getElementById("lightbox-video");
+  const btnPrev = document.getElementById("lb-prev");
+  const btnNext = document.getElementById("lb-next");
+  if (!lb || !lbImg) return;
+
+  // items: массив { type: 'img'|'video', src, alt }
+  let items = [];
+  let current = 0;
+
+  function showItem(idx) {
+    current = (idx + items.length) % items.length;
+    const item = items[current];
+
+    if (item.type === "video") {
+      lbImg.style.display = "none";
+      lbVid.style.display = "block";
+      lbVid.style.transform = "scale(0.88)";
+      lbVid.src = item.src;
+      lbVid.load();
+      lbVid.play().catch(() => {});
+      setTimeout(() => { lbVid.style.transform = ""; }, 20);
+    } else {
+      lbVid.style.display = "none";
+      lbVid.pause();
+      lbVid.src = "";
+      lbImg.style.display = "block";
+      lbImg.style.transform = "scale(0.88)";
+      lbImg.src = item.src;
+      lbImg.alt = item.alt || "";
+      setTimeout(() => { lbImg.style.transform = ""; }, 20);
+    }
+
+    const multi = items.length > 1;
+    btnPrev.style.display = multi ? "" : "none";
+    btnNext.style.display = multi ? "" : "none";
+  }
+
+  function open(itemArray, clickedEl) {
+    items = itemArray;
+    current = items.findIndex((it) => it.el === clickedEl);
+    if (current === -1) current = 0;
+    showItem(current);
+    lb.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
+
+  function close() {
+    lb.classList.remove("active");
+    document.body.style.overflow = "";
+    lbVid.pause();
+    lbVid.src = "";
+  }
+
+  // Собрать медиа из .graphs-grid
+  function getGraphItems() {
+    return Array.from(document.querySelectorAll(".graphs-grid .graph-card")).map((card) => {
+      const img = card.querySelector("img");
+      const vid = card.querySelector("video");
+      if (vid) {
+        const src = vid.querySelector("source")?.src || vid.src;
+        return { type: "video", src, el: vid };
+      }
+      return { type: "img", src: img.src, alt: img.alt, el: img };
+    });
+  }
+
+  // Отзывы
+  document.querySelector(".reviews-marquee").addEventListener("click", (e) => {
+    const img = e.target.closest(".reviews-img");
+    if (!img || img.getAttribute("aria-hidden")) return;
+    const all = Array.from(
+      document.querySelectorAll(".reviews-track .reviews-img:not([aria-hidden])")
+    ).map((el) => ({ type: "img", src: el.src, alt: el.alt, el }));
+    open(all, img);
+  });
+
+  // Графики
+  const graphsGrid = document.querySelector(".graphs-grid");
+  if (graphsGrid) {
+    graphsGrid.addEventListener("click", (e) => {
+      const card = e.target.closest(".graph-card");
+      if (!card) return;
+      const clickedEl = card.querySelector("img") || card.querySelector("video");
+      if (!clickedEl) return;
+      open(getGraphItems(), clickedEl);
+    });
+  }
+
+  btnPrev.addEventListener("click", (e) => { e.stopPropagation(); showItem(current - 1); });
+  btnNext.addEventListener("click", (e) => { e.stopPropagation(); showItem(current + 1); });
+
+  lb.addEventListener("click", (e) => { if (e.target === lb) close(); });
+  document.querySelector(".lightbox-close").addEventListener("click", close);
+
+  document.addEventListener("keydown", (e) => {
+    if (!lb.classList.contains("active")) return;
+    if (e.key === "Escape") close();
+    if (e.key === "ArrowLeft") showItem(current - 1);
+    if (e.key === "ArrowRight") showItem(current + 1);
+  });
+
+  // Свайп на мобиле
+  let touchX = 0;
+  lb.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener("touchend", (e) => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 40) showItem(dx < 0 ? current + 1 : current - 1);
+  });
+})();
+
+// ── GRAPHS MOBILE SLIDER ─────────────────────────────────────────────────────
+(function initGraphSlider() {
+  const grid = document.querySelector(".graphs-grid");
+  const dotsEl = document.getElementById("graphs-dots");
+  if (!grid || !dotsEl) return;
+
+  let scrollHandler = null;
+
+  function setup() {
+    dotsEl.innerHTML = "";
+    if (window.innerWidth > 640) return;
+
+    const items = Array.from(grid.querySelectorAll(".graph-item"));
+    items.forEach((_, i) => {
+      const d = document.createElement("div");
+      d.className = "shops-dot" + (i === 0 ? " active" : "");
+      d.addEventListener("click", () => {
+        items[i].scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        });
+      });
+      dotsEl.appendChild(d);
+    });
+
+    if (scrollHandler) grid.removeEventListener("scroll", scrollHandler);
+    scrollHandler = () => {
+      const center = grid.scrollLeft + grid.offsetWidth / 2;
+      let idx = 0,
+        minD = Infinity;
+      items.forEach((c, i) => {
+        const d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - center);
+        if (d < minD) {
+          minD = d;
+          idx = i;
+        }
+      });
+      dotsEl
+        .querySelectorAll(".shops-dot")
+        .forEach((d, i) => d.classList.toggle("active", i === idx));
+    };
+    grid.addEventListener("scroll", scrollHandler, { passive: true });
+  }
+
+  setup();
+  window.addEventListener("resize", setup);
+})();
+
 // ── MODALS ──────────────────────────────────────────────────────────────────
 function openModal(id) {
   const overlay = document.getElementById(id);
@@ -307,9 +481,9 @@ function closeModalOutside(e, id) {
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape")
-    document.querySelectorAll(".modal-overlay.active").forEach((m) =>
-      closeModal(m.id)
-    );
+    document
+      .querySelectorAll(".modal-overlay.active")
+      .forEach((m) => closeModal(m.id));
 });
 
 function toggleFaq(btn) {
@@ -330,7 +504,7 @@ function submitForm() {
     alert("Пожалуйста, заполни все поля");
     return;
   }
-  document.getElementById("form-success").style.display = "block";
+  document.getElementById("form-success").style.display = "block"; // .form-success-msg управляется через style т.к. нужен программный toggle
   ["f-name", "f-phone", "f-tg"].forEach(
     (id) => (document.getElementById(id).value = ""),
   );
@@ -346,3 +520,148 @@ document.getElementById("f-phone").addEventListener("input", function () {
   if (v.length >= 9) r += "-" + v.slice(8, 10);
   this.value = r;
 });
+(function () {
+  const SECTION_IDS = ["about", "tariffs", "reviews", "guide", "faq", "shops"];
+
+  const VERT = `
+    attribute vec2 a_pos;
+    void main() { gl_Position = vec4(a_pos, 0, 1); }
+  `;
+
+  const FRAG = `
+    precision mediump float;
+    uniform float u_t;
+    uniform vec2  u_res;
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_res;
+      float x = uv.x * 6.0;
+      float y = uv.y * 5.0;
+      float v = sin(x * 0.011 * 90.0 + u_t * 0.9) * cos(y * 0.009 * 90.0 - u_t * 0.6)
+              + sin((x * 1.3 - y) * 0.007 * 90.0 + u_t * 0.5) * cos(x * 0.005 * 90.0 + y * 0.006 * 90.0 - u_t * 0.4)
+              + sin(x * 0.02 * 90.0 - u_t * 0.5) * cos(y * 0.018 * 90.0 + u_t * 0.3)
+              + cos(sqrt(x * x * 0.01 + y * y * 0.01) + u_t * 0.4);
+      float n = clamp((v + 4.0) / 8.0, 0.0, 1.0);
+      float vv = pow(n, 1.8);
+      vec3 col;
+      if (vv < 0.3) {
+        float k = vv / 0.3;
+        col = vec3(5.0/255.0 + 8.0/255.0 * k,
+                   2.0/255.0 + 4.0/255.0 * k,
+                   15.0/255.0 + 20.0/255.0 * k);
+      } else if (vv < 0.6) {
+        float k = (vv - 0.3) / 0.3;
+        col = vec3(13.0/255.0 + 0.494 * k,
+                   6.0/255.0  + 0.231 * k,
+                   35.0/255.0 + 0.847 * k);
+      } else {
+        float k = (vv - 0.6) / 0.4;
+        col = vec3(0.494 + (0.776 - 0.494) * k,
+                   0.231 + (1.0   - 0.231) * k,
+                   0.929 + (0.204 - 0.929) * k);
+      }
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  function createBg(section) {
+    section.style.position = "relative";
+    section.style.overflow = "hidden";
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "liquid-bg-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    section.insertBefore(canvas, section.firstChild);
+
+    const gl =
+      canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (!gl) {
+      canvas.remove();
+      return;
+    }
+
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      gl.STATIC_DRAW,
+    );
+    const loc = gl.getAttribLocation(prog, "a_pos");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    const uT = gl.getUniformLocation(prog, "u_t");
+    const uRes = gl.getUniformLocation(prog, "u_res");
+
+    let animId = null,
+      visible = false,
+      startTime = null;
+
+    function resize() {
+      const isMobile = window.innerWidth <= 768;
+      const scale = isMobile ? 0.5 : 1.0;
+      canvas.width = (section.offsetWidth || 800) * scale;
+      canvas.height = (section.offsetHeight || 600) * scale;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    function draw(ts) {
+      if (!startTime) startTime = ts;
+      const t = (ts - startTime) * 0.001 * 0.7;
+      gl.uniform1f(uT, t);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      animId = requestAnimationFrame(draw);
+    }
+
+    function start() {
+      if (animId) return;
+      resize();
+      animId = requestAnimationFrame(draw);
+    }
+    function stop() {
+      if (animId) {
+        cancelAnimationFrame(animId);
+        animId = null;
+        startTime = null;
+      }
+    }
+
+    new IntersectionObserver(
+      (es) => {
+        es[0].isIntersecting
+          ? ((visible = true), start())
+          : ((visible = false), stop());
+      },
+      { threshold: 0.01 },
+    ).observe(section);
+
+    new ResizeObserver(() => {
+      if (visible) resize();
+    }).observe(section);
+  }
+
+  function init() {
+    SECTION_IDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) createBg(el);
+    });
+  }
+
+  document.readyState === "loading"
+    ? document.addEventListener("DOMContentLoaded", init)
+    : init();
+})();
+
